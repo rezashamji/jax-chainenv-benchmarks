@@ -1,80 +1,164 @@
-# PureJaxRL (End-to-End RL Training in Pure Jax)
+# README.md 
 
-[<img src="https://img.shields.io/badge/license-Apache2.0-blue.svg">](https://github.com/luchris429/purejaxrl/LICENSE)
-[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/luchris429/purejaxrl/blob/main/examples/walkthrough.ipynb)
+## ChainEnv RL Benchmarks (JAX)
 
-PureJaxRL is a high-performance, end-to-end Jax Reinforcement Learning (RL) implementation. When running many agents in parallel on GPUs, our implementation is over 1000x faster than standard PyTorch RL implementations. Unlike other Jax RL implementations, we implement the *entire training pipeline in JAX*, including the environment. This allows us to get significant speedups through JIT compilation and by avoiding CPU-GPU data transfer. It also results in easier debugging because the system is fully synchronous. More importantly, this code allows you to use jax to `jit`, `vmap`, `pmap`, and `scan` entire RL training pipelines. With this, we can:
+A complete RL playground around a 1-D **ChainEnv** with tunable exploration difficulty. Includes JAX implementations of **PPO**, **DDPG**, **SAC**, and **PQN (Q(λ))**, vectorized environments, a dynamic experiment runner, optional JAX ring buffers, and plotting utilities.
 
-- 🏃 Efficiently run tons of seeds in parallel on one GPU
-- 💻 Perform rapid hyperparameter tuning
-- 🦎 Discover new RL algorithms with meta-evolution
+## Why this repo?
+- **Compare exploration** on a sparse-reward toy task.
+- **Learn JAX RL patterns** (jit, vmap, PRNG, pure functions).
+- **Start simple, extend easily** with clear learners.
 
-For more details, visit the accompanying blog post: https://chrislu.page/blog/meta-disco/
+---
 
-This notebook walks through the basic usage: [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/luchris429/purejaxrl/blob/main/examples/walkthrough.ipynb)
+## Quickstart
 
-## CHECK OUT [RESOURCES.MD](https://github.com/luchris429/purejaxrl/blob/main/RESOURCES.md) to see github repos that are part of the Jax RL Ecosystem!
+### 1) Environment
+```bash
+python -m venv .venv && source .venv/bin/activate
+# Windows: .venv\Scripts\activate
+pip install --upgrade pip
 
-## Performance
+# Core deps
+pip install jax jaxlib flax optax distrax numpy matplotlib pandas
+````
 
-Without vectorization, our implementation runs 10x faster than [CleanRL's PyTorch baselines](https://github.com/vwxyzjn/cleanrl/blob/master/cleanrl/ppo.py), as shown in the single-thread performance plot.
+> Tip: GPU/TPU wheels vary by platform. Install the correct `jax/jaxlib` wheels for your accelerator.
 
-Cartpole                   |  Minatar-Breakout
-:-------------------------:|:-------------------------:
-![](docs/cartpole_plot_seconds.png)  |  ![](docs/minatar_plot_seconds.png)
+### 2) Run one algorithm
 
+```bash
+# Difficulty, total env steps, and seed via env vars
+export CHAIN_DIFFICULTY=medium
+export CHAIN_TOTAL_ENV_STEPS=80000
+export CHAIN_SEED=0
 
-With vectorized training, we can train 2048 PPO agents in half the time it takes to train a single PyTorch PPO agent on a single GPU. The vectorized agent training allows for simultaneous training across multiple seeds, rapid hyperparameter tuning, and even evolutionary Meta-RL. 
-
-Vectorised Cartpole        |  Vectorised Minatar-Breakout
-:-------------------------:|:-------------------------:
-![](docs/cartpole_plot_parallel.png)  |  ![](docs/minatar_plot_parallel.png)
-
-
-## Code Philosophy
-
-PureJaxRL is inspired by [CleanRL](https://github.com/vwxyzjn/cleanrl), providing high-quality single-file implementations with research-friendly features. Like CleanRL, this is not a modular library and is not meant to be imported. The repository focuses on simplicity and clarity in its implementations, making it an excellent resource for researchers and practitioners.
-
-## Installation
-
-Install dependencies using the requirements.txt file:
-
-```
-pip install -r requirements.txt
+# PPO example
+python algorithms/ppo_chain_jax.py
 ```
 
-In order to use JAX on your accelerators, you can find more details in the [JAX documentation](https://github.com/google/jax#installation).
+Outputs go to `runs/ppo/medium.csv` and `runs/ppo/medium_eval.csv` (when applicable).
 
-## Example Usage
+### 3) Run a full sweep
 
-[`examples/walkthrough.ipynb`](https://github.com/luchris429/purejaxrl/blob/main/examples/walkthrough.ipynb) walks through the basic usage. [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/luchris429/purejaxrl/blob/main/examples/walkthrough.ipynb)
+```bash
+python scripts/run_experiments.py \
+  --algos ppo ddpg sac pqn \
+  --difficulties easy medium hard \
+  --seed 0 \
+  --clear
+```
 
-[`examples/brax_minatar.ipynb`](https://github.com/luchris429/purejaxrl/blob/main/examples/brax_minatar.ipynb) walks through using PureJaxRL for Brax and MinAtar. [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/luchris429/purejaxrl/blob/main/examples/brax_minatar.ipynb)
+> If you omit `--algos`, `--difficulties`, or `--seed`, sensible defaults run everything. (So `python scripts/run_experiments.py --clear` is equivalent to the example above.)
 
-## Related Work
+### 4) Plot results
 
-Check out the list of [RESOURCES](https://github.com/luchris429/purejaxrl/blob/main/RESOURCES.md) to see libraries that are closely related to PureJaxRL!
+```bash
+# default: eval curves; pass --mode train for training curves
+python scripts/plot_results.py
+# Produces:
+# runs/chainenv_eval_by_difficulty.png
+# runs/chainenv_eval_by_algorithm.png
+# (and train_... variants if --mode train)
+```
 
-The following repositories and projects were pre-cursors to `purejaxrl`:
+---
 
-- [Model-Free Opponent Shaping](https://arxiv.org/abs/2205.01447) (ICML 2022) (https://github.com/luchris429/Model-Free-Opponent-Shaping)
-
-- [Discovered Policy Optimisation](https://arxiv.org/abs/2210.05639) (NeurIPS 2022) (https://github.com/luchris429/discovered-policy-optimisation)
-
-- [Adversarial Cheap Talk](https://arxiv.org/abs/2211.11030) (ICML 2023) (https://github.com/luchris429/adversarial-cheap-talk)
-
-## Citation
-
-If you use PureJaxRL in your work, please cite the following paper:
+## Repository layout
 
 ```
-@article{lu2022discovered,
-    title={Discovered policy optimisation},
-    author={Lu, Chris and Kuba, Jakub and Letcher, Alistair and Metz, Luke and Schroeder de Witt, Christian and Foerster, Jakob},
-    journal={Advances in Neural Information Processing Systems},
-    volume={35},
-    pages={16455--16468},
-    year={2022}
-}
+algorithms/
+  ppo_chain_jax.py          # On-policy PPO (categorical policy + GAE)
+  ddpg_chain_jax.py         # Off-policy DDPG (deterministic actor + twin Q)
+  sac_chain_jax.py          # Off-policy SAC (tanh-Gaussian + twin Q)
+  pqn_chain_jax.py          # On-policy PQN with Q(λ) targets
+  jax_buffer.py             # Optional ring buffers (JAX arrays)
+  __init__.py, utils.py     # Small helpers (env var config)
+
+envs/
+  chain_jax_env.py          # Functional, vectorized ChainEnv (JAX)
+  __init__.py
+
+external/
+  jaxrl_ddpg/               # Minimal DDPG learner (actor/critic/Polyak)
+  jaxrl2_sac/               # Minimal SAC learner (tanh-Gaussian, α fixed)
+  purejaxql_pqn/            # PQN learner (Flax + Optax RAdam)
+
+scripts/
+  run_experiments.py        # CLI runner for grid sweeps
+  plot_results.py           # Plots by difficulty/algorithm
 ```
+
+---
+
+## The environment (ChainEnv)
+
+* **Obs**: `(1,)` current position (float).
+* **Actions**:
+
+  * PPO/PQN: discrete `{0:left, 1:right}` (PPO samples; PQN ε-greedy).
+  * DDPG/SAC: continuous scalar; `action > 0 → right`, else left.
+* **Stochasticity**: with probability `slip`, flip the chosen direction.
+* **Rewards**: `r_small` at position 1 (local lure), `r_big` at goal (`N-1`).
+* **Done**: reaching goal or `t >= H`.
+
+Presets (`envs/chain_jax_env.py → DIFFICULTIES`):
+
+```
+easy:   N=5,  H=15, slip=0.00, r_small=0.3, r_big=1.0
+medium: N=7,  H=20, slip=0.15, r_small=0.1, r_big=1.0
+hard:   N=9,  H=25, slip=0.25, r_small=0.0, r_big=1.0
+```
+
+---
+
+## Outputs & logging
+
+Each algorithm writes CSVs under `runs/<algo>/<difficulty>.csv`:
+
+* Two columns: `steps,return` (episodic return vs env steps).
+* `_eval.csv` files are deterministic “greedy” evaluations when available:
+
+  * **DDPG/SAC**: always write `<difficulty>_eval.csv`.
+  * **PPO**: current script writes the same deterministic curve to both train and eval CSVs.
+  * **PQN**: saves training (ε-greedy) and a separate greedy eval curve.
+
+`plot_results.py`:
+
+* **By difficulty**: overlays algorithms per difficulty (fixed budgets).
+* **By algorithm**: shows easy/medium/hard curves stacked per algorithm.
+* Smoothing: moving average (window=8).
+
+---
+
+## Useful env vars (read in `algorithms/utils.py`)
+
+* `CHAIN_DIFFICULTY ∈ {easy,medium,hard}` (default: `medium`)
+* `CHAIN_TOTAL_ENV_STEPS` (default: `80000`)
+* `CHAIN_SEED` (default: `0`)
+
+The runner also accepts overrides like:
+
+```
+--override N=9 H=25 SLIP=0.3 R_SMALL=0.1
+```
+
+> These are exported as `CHAIN_<KEY>` env vars; use presets by default. (If you want overrides to alter the env beyond presets, add a small read-from-env shim in `chain_jax_env.py`.)
+
+---
+
+## Key algorithms (one-liners)
+
+* **PPO** (on-policy): stochastic categorical policy, **ratio clipping**, **GAE**, entropy bonus.
+* **DDPG** (off-policy): deterministic actor + **twin Q** critics, **target networks**, Gaussian exploration.
+* **SAC** (off-policy): tanh-Gaussian policy, entropy-regularized Q targets, **twin Q + targets**.
+* **PQN** (on-policy): **Q-network** trained with **Q(λ)** targets that push final rewards back through time.
+
+---
+
+## Extending
+
+* Add a new file in `algorithms/`.
+* Log a CSV like the others (`steps,return`).
+* Register it in `scripts/run_experiments.py → ALGORITHMS`.
+* Reuse `envs/chain_jax_env.py` and `algorithms/jax_buffer.py` as needed.
