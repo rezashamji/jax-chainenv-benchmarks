@@ -73,7 +73,7 @@ hard   : N=9,  H=25, slip=0.25, r_small=0.0, r_big=1.0
 
 ---
 
-## 4) Algorithms—what & where in the code
+## 4) Algorithms: what & where in the code
 
 ### 4.1 PPO (on-policy policy gradient)
 - **Files**: `algorithms/ppo_chain_jax.py`
@@ -193,8 +193,8 @@ python scripts/run_experiments.py --algos sac \
 
 Produced figures:
 
-* `runs/chainenv_eval_by_difficulty.png` — Algorithms compared within each difficulty.
-* `runs/chainenv_eval_by_algorithm.png` — Difficulties compared within each algorithm.
+* `runs/chainenv_eval_by_difficulty.png` : Algorithms compared within each difficulty.
+* `runs/chainenv_eval_by_algorithm.png`: Difficulties compared within each algorithm.
 * `runs/chainenv_train_by_difficulty.png`
 * `runs/chainenv_train_by_algorithm.png`
 
@@ -241,7 +241,7 @@ See `algorithms/jax_buffer.py` for a device-resident replay that returns JAX arr
 
 ## 9) FAQ
 
-**SAC is “stochastic”—why is eval deterministic?**
+**SAC is “stochastic”: why is eval deterministic?**
 Training samples from the tanh-Gaussian; evaluation uses `tanh(μ)` (no noise) to show best-guess policy performance.
 
 **What’s the “mask”?**
@@ -251,4 +251,4 @@ Training samples from the tanh-Gaussian; evaluation uses `tanh(μ)` (no noise) t
 Convenient budgets that let algorithms explore enough to reach the final goal given the slip/horizon.
 
 **When should I prefer PQN here?**
-On **sparse reward** chain tasks, PQN’s **Q(λ)** targets propagate final rewards backward fast—great for “learn to always go right.”
+On **sparse reward** chain tasks, PQN’s **Q(λ)** targets propagate final rewards backward fast: great for “learn to always go right.”

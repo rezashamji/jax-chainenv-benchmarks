@@ -1,5 +1,21 @@
 # CONCLUSIONS.md
 
+## Figures referenced
+
+The following plots visualize the summarized results discussed below.  
+All figures are located in the `results/` folder of this repository.
+
+| Figure | Description |
+|:--|:--|
+| **chainenv_train_by_algorithm.png** | Training curves (ε-greedy) grouped **by algorithm** across all difficulty levels. |
+| **chainenv_train_by_difficulty.png** | Training curves (ε-greedy) grouped **by difficulty** across all algorithms. |
+| **chainenv_eval_by_algorithm.png** | Deterministic evaluation (greedy) grouped **by algorithm**. |
+| **chainenv_eval_by_difficulty.png** | Deterministic evaluation (greedy) grouped **by difficulty**. |
+
+These correspond respectively to the **training** (exploratory) and **evaluation** (greedy) phases described later in the conclusions.
+
+---
+
 ## What the results show (at a glance)
 
 **Easy chain:**
@@ -17,7 +33,7 @@
 * **None** of the algorithms solve it within the current budgets.
 * **PQN** shows **rare spikes** (occasional discoveries) but cannot convert them into stable policy improvement; **SAC** and **DDPG** are near-zero; **PPO** drifts around the small-reward baseline with volatility.
 
-These patterns are consistent across **training curves (ε-greedy / noisy)** and **deterministic evaluation curves (greedy)**. The training plots are noisier—especially for PQN—because exploration noise (ε-greedy or stochastic policies) is active; evaluation removes that noise and reveals the actual learned policy.
+These patterns are consistent across **training curves (ε-greedy / noisy)** and **deterministic evaluation curves (greedy)**. The training plots are noisier, especially for PQN, because exploration noise (ε-greedy or stochastic policies) is active; evaluation removes that noise and reveals the actual learned policy.
 
 ---
 
@@ -25,7 +41,7 @@ These patterns are consistent across **training curves (ε-greedy / noisy)** and
 
 ### PPO (on-policy, clipped PG with GAE)
 
-* **Easy:** gets stuck at the **local optimum**—expected for an on-policy method with limited exploration pressure.
+* **Easy:** gets stuck at the **local optimum**, expected for an on-policy method with limited exploration pressure.
 * **Medium/Hard:** also stuck; slight advantage on **Medium** likely comes from decent value learning for the small-reward path plus stable on-policy updates.
 * **Why:** On-policy data collection rarely visits the sparse terminal reward; clipping+GAE stabilizes learning but doesn’t create new exploratory behavior.
 
@@ -44,7 +60,7 @@ These patterns are consistent across **training curves (ε-greedy / noisy)** and
 ### PQN (on-policy Q-learning with **Q(λ)**)
 
 * **Easy:** **solves cleanly** in evaluation; training shows dips because ε-greedy keeps injecting exploration even after the policy is good.
-* **Medium:** plateaus suboptimally; **λ-returns can only help after a few successes**—which seem too rare here.
+* **Medium:** plateaus suboptimally; **λ-returns can only help after a few successes**, which seem too rare here.
 * **Hard:** exhibits **occasional spikes** (some discoveries) but cannot convert them into stable improvement before ε decays and/or before the budget ends.
 * **Why:** The strength of PQN is **fast reward propagation once a success occurs** (λ floods credit back). The bottleneck here is **discovery**, not propagation.
 
@@ -53,12 +69,12 @@ These patterns are consistent across **training curves (ε-greedy / noisy)** and
 ## Why this is happening (mechanistic read)
 
 1. **Exploration barrier dominates.**
-   ChainEnv requires a long sequence of right moves while resisting the attractive small reward at position 1. As horizon increases and **slip** grows, the probability of ever observing the terminal reward **decays sharply**. Algorithms differ mostly in how often they **ever** hit the goal—not in how well they optimize once they see it.
+   ChainEnv requires a long sequence of right moves while resisting the attractive small reward at position 1. As horizon increases and **slip** grows, the probability of ever observing the terminal reward **decays sharply**. Algorithms differ mostly in how often they **ever** hit the goal, not in how well they optimize once they see it.
 
 2. **On-policy vs off-policy dynamics.**
 
    * **On-policy** (PPO, PQN) explores with the **current** behavior; if that behavior locks onto the small reward, improvements stall.
-   * **Off-policy** (DDPG, SAC) can in principle learn from **lucky, rare** successes if they ever land in replay—but without those, targets never rise above the small-reward plateau.
+   * **Off-policy** (DDPG, SAC) can in principle learn from **lucky, rare** successes if they ever land in replay but without those, targets never rise above the small-reward plateau.
 
 3. **Why SAC beats DDPG on Easy.**
    SAC’s entropy term sustains **wider action coverage**, so it’s more likely to experience the full rightward trajectory early. Once a few successes appear, twin-Q + targets lock in the better policy. DDPG’s exploration is too myopic here.
@@ -132,7 +148,7 @@ These patterns are consistent across **training curves (ε-greedy / noisy)** and
 
 ## Final narrative
 
-* On **Easy**, once the terminal reward is discovered, **Q(λ)** (PQN) and **entropy-driven exploration** (SAC) rapidly produce near-optimal greedy policies—**proof that the learners and value propagation work**.
+* On **Easy**, once the terminal reward is discovered, **Q(λ)** (PQN) and **entropy-driven exploration** (SAC) rapidly produce near-optimal greedy policies: **proof that the learners and value propagation work**.
 * On **Medium** and **Hard**, the **probability of discovery** becomes the dominant factor; without extra exploration mechanisms or longer budgets, **all methods underperform**, with **PPO** slightly ahead on Medium due to stable on-policy updates around the small-reward path.
 * These outcomes are **fully consistent** with prior work: PPO/DDPG/SAC are not designed to crack severe sparse exploration on their own; PQN accelerates learning **after** discovery but doesn’t guarantee discovery.
 
