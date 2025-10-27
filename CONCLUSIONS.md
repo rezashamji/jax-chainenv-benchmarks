@@ -1,155 +1,133 @@
-# CONCLUSIONS.md
+# CONCLUSIONS.md 
 
 ## Figures referenced
 
 The following plots visualize the summarized results discussed below.  
-All figures are located in the `results/` folder of this repository.
+All figures are located in the `runs/` folder of this repository.
 
 | Figure | Description |
 |:--|:--|
-| **chainenv_train_by_algorithm.png** | Training curves (ε-greedy) grouped **by algorithm** across all difficulty levels. |
-| **chainenv_train_by_difficulty.png** | Training curves (ε-greedy) grouped **by difficulty** across all algorithms. |
-| **chainenv_eval_by_algorithm.png** | Deterministic evaluation (greedy) grouped **by algorithm**. |
-| **chainenv_eval_by_difficulty.png** | Deterministic evaluation (greedy) grouped **by difficulty**. |
+| **chainenv_train_by_algorithm.png** | Training curves (with exploration noise) grouped **by algorithm** across all difficulty levels. |
+| **chainenv_train_by_difficulty.png** | Training curves (with exploration noise) grouped **by difficulty** across all algorithms. |
+| **chainenv_eval_by_algorithm.png** | Deterministic **evaluation (greedy)** grouped **by algorithm**. |
+| **chainenv_eval_by_difficulty.png** | Deterministic **evaluation (greedy)** grouped **by difficulty**. |
 
-These correspond respectively to the **training** (exploratory) and **evaluation** (greedy) phases described later in the conclusions.
+These correspond respectively to the **training** (exploratory) and **evaluation** (greedy) phases described below.
 
 ---
 
 ## What the results show (at a glance)
 
-**Easy chain:**
+**Max greedy return per preset (theoretical upper bound if you just go straight to the goal):**
+- **Easy:** `r_small + r_big = 0.3 + 1.0 = 1.3`
+- **Medium:** `0.1 + 1.0 = 1.1`
+- **Hard:** `0.0 + 1.0 = 1.0`
 
-* **SAC** and **PQN** reliably reach the **final (big) reward**; deterministic eval plateaus near the task’s empirical max (~2.4).
-* **PPO** and **DDPG** hover around the **local lure** (≈1.2–1.3) and rarely commit to the long rightward trajectory.
+**Easy chain:**
+- **SAC** and **PQN** reliably reach the **final (big) reward**; greedy evaluation is often ~2.3–2.5 because policies frequently collect the small reward at position 1 several times before finishing; the straight-to-goal baseline is 1.3.`
+- **PPO** and **DDPG** often hover around the **local lure** and/or fall short of consistently reaching the goal within budget.
 
 **Medium chain:**
-
-* No algorithm consistently solves the task.
-* **PPO** is the least-bad (≈1.1–1.2), while **DDPG ≈ SAC ≈ PQN** settle near suboptimal returns (~0.9–1.0).
+- No algorithm consistently solves the task.
+- **PPO** is typically the highest (~**near the small-reward + occasional progress**), with **DDPG close behind** and **SAC ≈ PQN** tend to settle near suboptimal returns.
 
 **Hard chain:**
+- **None** of the algorithms reliably solve it within the current budgets.
+- **PPO and DDPG** intermittently reach near-goal returns but lack stability; averages remain below the maximum.
+- **SAC** is mostly near zero with rare blips. PQN shows rare spikes (discoveries) without stable conversion.
 
-* **None** of the algorithms solve it within the current budgets.
-* **PQN** shows **rare spikes** (occasional discoveries) but cannot convert them into stable policy improvement; **SAC** and **DDPG** are near-zero; **PPO** drifts around the small-reward baseline with volatility.
-
-These patterns are consistent across **training curves (ε-greedy / noisy)** and **deterministic evaluation curves (greedy)**. The training plots are noisier, especially for PQN, because exploration noise (ε-greedy or stochastic policies) is active; evaluation removes that noise and reveals the actual learned policy.
+These patterns are consistent across **training** (noisy policy sampling for PPO, Gaussian/tanh-Gaussian for DDPG/SAC, ε-greedy for PQN) and **eval** (greedy) curves. Eval removes exploration noise and shows the true learned policy.
 
 ---
 
 ## Per-algorithm takeaways
 
 ### PPO (on-policy, clipped PG with GAE)
+- **Easy:** tends to get pulled to the **local optimum**; without explicit exploration bonuses it struggles to consistently discover the long rightward path.
+- **Medium/Hard:** mostly stuck; slight advantage on **Medium** likely from stable on-policy updates around the small-reward path.
+- **Why:** on-policy sampling doesn’t frequently reach the sparse terminal reward; clipping+GAE stabilize optimization but don’t create exploration.
 
-* **Easy:** gets stuck at the **local optimum**, expected for an on-policy method with limited exploration pressure.
-* **Medium/Hard:** also stuck; slight advantage on **Medium** likely comes from decent value learning for the small-reward path plus stable on-policy updates.
-* **Why:** On-policy data collection rarely visits the sparse terminal reward; clipping+GAE stabilizes learning but doesn’t create new exploratory behavior.
-
-### DDPG (off-policy, deterministic actor + twin Q)
-
-* **Easy:** tracks the small reward, rarely discovers the long rightward path.
-* **Medium/Hard:** fails to explore; value targets stay near the local reward manifold.
-* **Why:** Deterministic policies with simple Gaussian noise are notoriously **exploration-poor** on sparse tasks; without hits to the goal, the replay buffer never contains informative targets.
+### DDPG (off-policy, deterministic actor + twin Q + targets)
+- **Easy:** often tracks small reward; discovery of the long right path is unreliable.
+- **Medium/Hard:** fails to explore; replay rarely contains successful terminal transitions.
+- **Why:** deterministic policy + simple Gaussian noise is **exploration-poor** on sparse, long-horizon tasks.
 
 ### SAC (off-policy, stochastic actor with entropy)
-
-* **Easy:** **solves**: entropy regularization sustains broad exploration long enough to find and exploit the goal; eval is clean and high.
-* **Medium/Hard:** entropy is **not enough**; still fails to discover the long sparse sequence reliably within the budget.
-* **Why:** SAC’s exploration is strong but not magic; in harder settings (longer horizon + slip) the probability of stumbling into the full rightward trajectory drops too low for the current budgets/hparams.
+- **Easy:** commonly **solves**; entropy keeps exploration broad enough to hit the goal early, then twin-Q/targets consolidate it.
+- **Medium/Hard:** entropy alone is **insufficient** here; the chance of stumbling into the full rightward trajectory remains low within budget.
+- **Why:** better exploration than DDPG but still fundamentally chance-based without intrinsic bonuses/curriculum.
 
 ### PQN (on-policy Q-learning with **Q(λ)**)
-
-* **Easy:** **solves cleanly** in evaluation; training shows dips because ε-greedy keeps injecting exploration even after the policy is good.
-* **Medium:** plateaus suboptimally; **λ-returns can only help after a few successes**, which seem too rare here.
-* **Hard:** exhibits **occasional spikes** (some discoveries) but cannot convert them into stable improvement before ε decays and/or before the budget ends.
-* **Why:** The strength of PQN is **fast reward propagation once a success occurs** (λ floods credit back). The bottleneck here is **discovery**, not propagation.
+- **Easy:** **solves cleanly** in greedy evaluation; training can show dips because ε-greedy exploration persists during training.
+- **Medium:** plateaus suboptimally; **λ-returns** help **after** a success but do not make successes more frequent.
+- **Hard:** **occasional spikes** (some discoveries) without stable conversion to policy improvement before ε decays or budget ends.
+- **Why:** PQN’s strength is **fast credit propagation once success happens**; bottleneck is **discovery**, not propagation.
 
 ---
 
 ## Why this is happening (mechanistic read)
 
-1. **Exploration barrier dominates.**
-   ChainEnv requires a long sequence of right moves while resisting the attractive small reward at position 1. As horizon increases and **slip** grows, the probability of ever observing the terminal reward **decays sharply**. Algorithms differ mostly in how often they **ever** hit the goal, not in how well they optimize once they see it.
+1. **Exploration barrier dominates.**  
+   The agent must string together many **right moves** and resist the **small-reward lure** at position 1. With longer horizons and **slip**, the probability of ever seeing the terminal reward collapses.
 
-2. **On-policy vs off-policy dynamics.**
+2. **Small-reward harvesting on Easy.**
+    With H=15 and r_small=0.3, a policy can oscillate between 0 and 1 multiple times and still reach the goal, so total return can exceed the straight-to-goal 1.3.`
 
-   * **On-policy** (PPO, PQN) explores with the **current** behavior; if that behavior locks onto the small reward, improvements stall.
-   * **Off-policy** (DDPG, SAC) can in principle learn from **lucky, rare** successes if they ever land in replay but without those, targets never rise above the small-reward plateau.
+3. **On- vs off-policy differences.**  
+   - **On-policy** (PPO, PQN): explore with the **current** behavior; if that behavior locks on the small reward, learning saturates.  
+   - **Off-policy** (DDPG, SAC): can in principle learn from **rare successes** if they land in replay, but without them the targets stay flat.
 
-3. **Why SAC beats DDPG on Easy.**
-   SAC’s entropy term sustains **wider action coverage**, so it’s more likely to experience the full rightward trajectory early. Once a few successes appear, twin-Q + targets lock in the better policy. DDPG’s exploration is too myopic here.
+4. **Why SAC > DDPG on Easy.**  
+   SAC’s entropy sustains **wider action coverage**; once a few successes enter replay, twin-Q + targets stabilize the better policy. DDPG’s exploration is narrower.
 
-4. **Why PQN shines on Easy but not on Medium/Hard.**
-   **Q(λ)** gives **excellent credit assignment** *after* a success, but it does not make that first success more likely by itself. With a few hits (Easy), PQN rockets to optimal. With almost none (Medium/Hard), it looks average or worse.
+5. **Why PQN shines on Easy but not Medium/Hard.**  
+   **Q(λ)** propagates reward **quickly** once observed; it doesn’t increase the odds of the **first** success.
 
-5. **Training vs Eval discrepancy (especially PQN).**
-   Training curves include **ε-greedy** actions → visible drops even after learning. Eval is **greedy** → shows the true competency of the learned Q-policy.
+6. **Training vs Eval (algorithm-specific).**  
+   Training curves include exploration noise: **PPO** samples from a categorical, **DDPG** uses Gaussian noise, **SAC** samples tanh-Gaussian actions, **PQN** is ε-greedy. Greedy **eval** removes that noise and shows the actual policy.
 
 ---
 
 ## Alignment with the papers
 
-* **PPO (Schulman et al., 2017):**
-  Paper emphasizes stable policy optimization with clipped ratios, not solving sparse exploration by itself. **Observed behavior aligns**: stable but prone to local optima without explicit exploration bonuses (curiosity, counts, etc.).
+- **PPO (Schulman et al., 2017):** Clipped policy ratios + GAE stabilize on-policy learning; no built-in sparse-exploration fix. **Observed behavior aligns.**
+- **DDPG (Lillicrap et al., 2015/2016):** Strong on dense control; brittle exploration on sparse tasks. **Observed behavior aligns.** (This implementation uses Gaussian rather than the paper’s OU noise. This doesn’t change the core point.)
+- **SAC (Haarnoja et al., 2018):** Maximum-entropy objective improves exploration but doesn’t guarantee solving long-horizon sparse tasks. **Observed behavior aligns.**
+- **PQN / Q(λ):** λ-returns accelerate credit assignment **after** success; discovery remains the bottleneck. **Observed behavior aligns.**
 
-* **DDPG (Lillicrap et al., 2015/2016):**
-  Strong results on **dense-reward** continuous control; widely known to be brittle in sparse regimes. **Observed behavior aligns**: poor exploration prevents progress.
-
-* **SAC (Haarnoja et al., 2018):**
-  Robust across many benchmarks; entropy helps exploration but does not guarantee success on **long-horizon, sparse** tasks. **Observed behavior aligns**: solves Easy, struggles on Medium/Hard without extra help.
-
-* **PQN (Q(λ) on-policy Q-learning):**
-  Theory/intuition: once terminal rewards are observed, **λ-returns propagate signal quickly** and reduce bootstrap myopia. **Observed behavior partially aligns**: great on Easy (many terminal hits), limited on Medium/Hard where discovery is the bottleneck.
-
-**Bottom line:** there is **no contradiction** with the literature. The results stress that **exploration, not optimization**, limits performance on ChainEnv as difficulty grows.
+**Bottom line:** performance is **exploration-limited**, not optimizer-limited, as difficulty grows.
 
 ---
 
-## Caveats & likely contributors to gaps
+## Caveats & likely contributors
 
-* **Action-space mismatch for DDPG/SAC.** We learn continuous actions but **threshold to {left,right}**. That discards gradient structure (sign only) and may blunt learning. Consider **SAC-Discrete** or native discrete critics/policies.
-
-* **Hyperparameters are generic.**
-  SAC temperature (α), DDPG noise scale/schedule, PPO entropy bonus, PQN ε-schedule and λ may be **under-tuned for sparse exploration**.
-
-* **Single-seed sensitivity.**
-  ChainEnv is extremely sensitive to the **first few thousand steps**. Multi-seed (e.g., 10 seeds) with mean ± 95% CI would give a more faithful picture.
-
-* **Return scale and logging.**
-  Reward magnitudes (r_small vs r_big) and horizon interact with critic targets; normalizing advantages/targets or using reward scaling could stabilize learning.
+- **Action-space mismatch for DDPG/SAC.** Policies are continuous but the env interprets **sign(action)** as {left,right}. This removes gradient structure for direction choice; **SAC-Discrete** / discrete critics may help.
+- **Hyperparameters are generic.** α (SAC), noise scale (DDPG), entropy bonus (PPO), ε-schedule/λ (PQN) are not tuned for severe sparsity.
+- **Single-seed sensitivity.** Multi-seed runs (e.g., 10 seeds, mean ± 95% CI) would be more faithful.
+- **Reward scale vs targets.** Advantage/value normalization and/or reward scaling can matter.
 
 ---
 
-## Recommendations (what to try next)
+## Recommendations
 
-1. **Make off-policy methods truly discrete.**
-   Implement **SAC-Discrete** (categorical policy; soft Q over 2 actions) and a **discrete DQN-style baseline** with n-step/λ-returns. This removes the thresholding hack and should materially help.
-
-2. **Strengthen exploration:**
-
-   * **Count-based / RND / ICM** bonuses for PPO and SAC.
-   * **ε floor & slower decay** for PQN; keep exploration alive longer on Medium/Hard.
-   * **More envs in parallel** so rare successes appear earlier (helps PQN and off-policy).
-
-3. **Budget & curriculum:**
-   Increase **total env steps** for Medium/Hard and/or use **curriculum** (train Easy → initialize Medium, etc.). PQN, in particular, should benefit: once it sees the terminal, it learns fast.
-
-4. **Diagnostics to add:**
-   Log **success rate** (goal reached), **average action-right ratio** early in episodes, and **buffer hit counts** for terminal transitions. These directly test the “discovery vs propagation” hypothesis.
-
-5. **Tune critical hparams:**
-
-   * **SAC:** auto-tuning α, larger target entropy, slightly larger actor std init.
-   * **DDPG:** OU noise with higher σ and slower decay; delayed policy updates.
-   * **PPO:** higher entropy bonus; occasional ε-greedy overlay during data collection.
-   * **PQN:** try λ ∈ {0.7, 0.9, 0.95}, larger batch, gradient clipping on targets, slower ε decay.
+1. **Make off-policy methods discrete.** Try **SAC-Discrete** (categorical policy, soft Q over 2 actions) and a DQN-style baseline with n-step/λ-returns.
+2. **Strengthen exploration:** count/RND/ICM bonuses; slower ε decay or ε floor for PQN; more parallel envs.
+3. **Budget & curriculum:** expand **Medium/Hard** budgets; or train **Easy → initialize Medium**, etc.
+4. **Diagnostics:** log **success rate**, **right-action ratio** in early steps, and replay **terminal-transition counts**.
+5. **Hyperparam sweeps:**
+   - **SAC:** autotune α, larger target entropy, higher init std.
+   - **DDPG:** stronger/decaying noise (OU or larger Gaussian), delayed policy updates.
+   - **PPO:** higher entropy bonus; optional ε-greedy overlay during collection.
+   - **PQN:** λ ∈ {0.7, 0.9, 0.95}, larger batch, grad-clip, slower ε decay.
 
 ---
 
 ## Final narrative
 
-* On **Easy**, once the terminal reward is discovered, **Q(λ)** (PQN) and **entropy-driven exploration** (SAC) rapidly produce near-optimal greedy policies: **proof that the learners and value propagation work**.
-* On **Medium** and **Hard**, the **probability of discovery** becomes the dominant factor; without extra exploration mechanisms or longer budgets, **all methods underperform**, with **PPO** slightly ahead on Medium due to stable on-policy updates around the small-reward path.
-* These outcomes are **fully consistent** with prior work: PPO/DDPG/SAC are not designed to crack severe sparse exploration on their own; PQN accelerates learning **after** discovery but doesn’t guarantee discovery.
+- On **Easy**, once the terminal reward is discovered, **PQN (Q(λ))** and **SAC (entropy)** quickly produce high greedy returns (~2.3–2.5 on Easy due to small-reward harvesting).  
+- On **Medium/Hard**, the **probability of discovery** dominates; all methods underperform without extra exploration or budget, with **PPO** often slightly ahead on Medium.
+- This mirrors the literature: PPO/DDPG/SAC don’t *solve* sparse exploration by themselves; PQN excels **after** discovery.
 
-**Main lesson:** ChainEnv at higher difficulty is an **exploration benchmark** first and foremost. Improving **how** we explore (discrete SAC, better ε-schedules, intrinsic bonuses, parallelism, curriculum) should move Medium/Hard from “rare spikes” to **reliable learning**, at which point PQN and SAC should again separate themselves by **how fast** they propagate the sparse signal.
+**Main lesson:** ChainEnv at higher difficulty is an **exploration benchmark**. Improve *how we explore* (discrete SAC, intrinsic bonuses, ε-schedules, parallelism, curriculum) to turn Medium/Hard from “rare spikes” into **reliable learning**.
+```
+---
