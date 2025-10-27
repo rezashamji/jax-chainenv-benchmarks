@@ -35,12 +35,11 @@ Vectorization wrappers:
 
 Presets (`envs/chain_jax_env.py → DIFFICULTIES`):
 ```
-
 easy   : N=5,  H=15, slip=0.00, r_small=0.3, r_big=1.0
 medium : N=7,  H=20, slip=0.15, r_small=0.1, r_big=1.0
 hard   : N=9,  H=25, slip=0.25, r_small=0.0, r_big=1.0
 
-````
+```
 
 ---
 
@@ -85,7 +84,7 @@ hard   : N=9,  H=25, slip=0.25, r_small=0.0, r_big=1.0
   ```python
   delta = r_t + γ * V(s_{t+1}) * (1 - done_t) - V(s_t)
   GAE_t = delta + γ * λ * (1 - done_t) * GAE_{t+1}
-````
+  ```
 
 Implemented in `_calculate_gae` with a reverse scan.
 
